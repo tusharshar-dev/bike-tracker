@@ -32,6 +32,11 @@ th{color:#00e676}
 #map{height:250px;border-radius:10px;margin-top:10px}
 </style>
 </head>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('service-worker.js');
+}
+</script>
 <body>
 
 <div class="header">Yamaha FZX Petrol Tracker</div>
