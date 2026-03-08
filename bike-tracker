@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FZX Petrol Tracker</title>
+<link rel="manifest" href="manifest.json">
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+<!-- Leaflet Map -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+body{font-family:Arial;margin:0;background:#111;color:#fff}
+.header{background:#000;padding:15px;text-align:center;font-size:20px;font-weight:bold}
+.container{padding:15px}
+.card{background:#1c1c1c;border-radius:12px;padding:15px;margin-bottom:15px}
+label{font-size:14px}
+select,input,button{width:100%;padding:12px;margin-top:6px;margin-bottom:12px;border-radius:8px;border:none;font-size:16px}
+button{background:#00c853;color:white;font-weight:bold}
+.gpsBtn{background:#ff9800}
+.stopBtn{background:#d50000}
+.deleteBtn{background:#d50000;padding:6px 10px;font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:8px;border-bottom:1px solid #333;text-align:center}
+th{color:#00e676}
+.stat{display:flex;justify-content:space-between;margin-top:8px}
+.badge{background:#00c853;padding:6px 10px;border-radius:20px;font-size:12px}
+#map{height:250px;border-radius:10px;margin-top:10px}
+</style>
+</head>
+<body>
+
+<div class="header">Yamaha FZX Petrol Tracker</div>
+
+<div class="container">
+
+<div class="card">
+<label>Driver</label>
+<select id="driver">
+<option value="Tushar">Tushar</option>
+<option value="Rahul">Rahul</option>
+</select>
+
+<label>Kilometers Driven (manual)</label>
+<input type="number" id="km" placeholder="Enter KM">
+
+<button onclick="addRide()">Add Manual Ride</button>
+
+<button class="gpsBtn" onclick="startTracking()">Start GPS Ride</button>
+<button class="stopBtn" onclick="stopTracking()">Stop GPS Ride</button>
+
+<div>GPS KM: <span id="gpsKM">0</span></div>
+
+<div id="map"></div>
+</div>
+
+<div class="card">
+<h3>Petrol Balance</h3>
+<div class="stat"><span>Tushar</span><span id="tusharBalance" class="badge">₹0</span></div>
+<div class="stat"><span>Rahul</span><span id="rahulBalance" class="badge">₹0</span></div>
+</div>
+
+<div class="card">
+<h3>Monthly Report</h3>
+<div class="stat"><span>Tushar KM</span><span id="tusharKM">0</span></div>
+<div class="stat"><span>Rahul KM</span><span id="rahulKM">0</span></div>
+<div class="stat"><span>Total KM</span><span id="totalKM">0</span></div>
+</div>
+
+<div class="card">
+<h3>Ride History</h3>
+<table>
+<thead>
+<tr>
+<th>Driver</th>
+<th>KM</th>
+<th>Petrol</th>
+<th>Cost</th>
+<th>Delete</th>
+</tr>
+</thead>
+<tbody id="records"></tbody>
+</table>
+</div>
+
+</div>
+
+<script>
+const mileage=45
+const petrolPrice=106
+
+// Firebase config (replace with your project keys)
+const firebaseConfig={
+ apiKey:"YOUR_API_KEY",
+ authDomain:"YOUR_PROJECT.firebaseapp.com",
+ databaseURL:"https://YOUR_PROJECT.firebaseio.com",
+ projectId:"YOUR_PROJECT"
+}
+
+firebase.initializeApp(firebaseConfig)
+const db=firebase.database()
+const ridesRef=db.ref("rides")
+
+let rides=[]
+
+// Map setup
+const map=L.map('map').setView([22.5726,88.3639],13)
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map)
+
+let polyline=L.polyline([], {color:'lime'}).addTo(map)
+let pathCoords=[]
+
+function addRide(){
+const driver=document.getElementById('driver').value
+const km=parseFloat(document.getElementById('km').value)
+
+if(!km){alert('Enter KM');return}
+
+const petrol=km/mileage
+const cost=petrol*petrolPrice
+
+ridesRef.push({driver,km,petrol,cost,date:Date.now()})
+}
+
+function deleteRide(id){
+if(confirm('Delete this ride?')){
+ridesRef.child(id).remove()
+}
+}
+
+ridesRef.on('value',snapshot=>{
+rides=[]
+const data=snapshot.val()||{}
+
+for(let id in data){
+ rides.push({...data[id],id})
+}
+
+render()
+})
+
+function render(){
+const table=document.getElementById('records')
+table.innerHTML=''
+
+let tusharKM=0
+let rahulKM=0
+let tusharCost=0
+let rahulCost=0
+
+rides.forEach(r=>{
+const tr=document.createElement('tr')
+
+tr.innerHTML=`
+<td>${r.driver}</td>
+<td>${r.km.toFixed(2)}</td>
+<td>${r.petrol.toFixed(2)} L</td>
+<td>₹${r.cost.toFixed(0)}</td>
+<td><button class="deleteBtn" onclick="deleteRide('${r.id}')">Delete</button></td>
+`
+
+if(r.driver==='Tushar'){
+tusharKM+=r.km
+
+tusharCost+=r.cost
+}else{
+rahulKM+=r.km
+
+rahulCost+=r.cost
+}
+
+ table.appendChild(tr)
+})
+
+document.getElementById('tusharKM').innerText=Math.round(tusharKM)
+document.getElementById('rahulKM').innerText=Math.round(rahulKM)
+document.getElementById('totalKM').innerText=Math.round(tusharKM+rahulKM)
+
+
+document.getElementById('tusharBalance').innerText='₹'+Math.round(tusharCost)
+document.getElementById('rahulBalance').innerText='₹'+Math.round(rahulCost)
+}
+
+// GPS tracking with map path
+let watchId=null
+let lastPos=null
+let gpsDistance=0
+
+function startTracking(){
+
+watchId=navigator.geolocation.watchPosition(pos=>{
+
+const lat=pos.coords.latitude
+const lon=pos.coords.longitude
+
+const newPoint=[lat,lon]
+
+pathCoords.push(newPoint)
+polyline.setLatLngs(pathCoords)
+
+map.setView(newPoint)
+
+if(lastPos){
+const d=distance(lastPos.lat,lastPos.lon,lat,lon)
+ gpsDistance+=d
+ document.getElementById('gpsKM').innerText=gpsDistance.toFixed(2)
+}
+
+lastPos={lat,lon}
+
+},{enableHighAccuracy:true})
+
+}
+
+function stopTracking(){
+
+navigator.geolocation.clearWatch(watchId)
+
+const driver=document.getElementById('driver').value
+const km=gpsDistance
+
+if(km>0){
+const petrol=km/mileage
+const cost=petrol*petrolPrice
+ridesRef.push({driver,km,petrol,cost,date:Date.now()})
+}
+
+// reset
+pathCoords=[]
+polyline.setLatLngs([])
+
+gpsDistance=0
+lastPos=null
+
+document.getElementById('gpsKM').innerText=0
+
+}
+
+function distance(lat1,lon1,lat2,lon2){
+const R=6371
+const dLat=(lat2-lat1)*Math.PI/180
+const dLon=(lon2-lon1)*Math.PI/180
+
+const a=Math.sin(dLat/2)*Math.sin(dLat/2)+
+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+Math.sin(dLon/2)*Math.sin(dLon/2)
+
+const c=2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))
+
+return R*c
+}
+
+</script>
+
+</body>
+</html>
